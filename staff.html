@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>意見箱 回答ダッシュボード（教職員専用）</title>
+  <style>
+    :root { --staff-primary: #0f766e; --bg-color: #f0fdf4; --card-bg: #ffffff; --text-main: #1e293b; --border: #cbd5e1; }
+    body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; }
+    .staff-header { background-color: var(--staff-primary); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+    .staff-header h1 { margin: 0; font-size: 1.2rem; }
+    .container { max-width: 800px; margin: 20px auto; padding: 0 20px; }
+    .opinion-card { background-color: var(--card-bg); border-radius: 8px; padding: 20px; margin-bottom: 24px; border-left: 5px solid var(--staff-primary); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; font-weight: bold; display: inline-block; margin-right: 8px; margin-bottom: 8px; }
+    .tag-category { background-color: #f3e8ff; color: #6b21a8; }
+    .tag-status { background-color: #e0e7ff; color: #3730a3; }
+    .opinion-body { font-size: 1rem; line-height: 1.6; white-space: pre-wrap; margin: 12px 0; padding: 12px; background-color: #f8fafc; border-radius: 4px; border: 1px solid var(--border); }
+    .reply-section { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); }
+    .reply-section label { display: block; font-weight: bold; font-size: 0.9rem; margin-bottom: 8px; color: var(--staff-primary); }
+    textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; font-size: 0.95rem; margin-bottom: 12px; }
+    .submit-reply-btn { background-color: var(--staff-primary); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header class="staff-header">
+    <h1>教職員専用 回答ダッシュボード</h1>
+    <span style="font-size: 0.85rem;">学生担当窓口</span>
+  </header>
+
+  <div class="container">
+    <h2 style="margin-bottom: 20px; color: #334155;">大学宛の意見・要望（要回答）</h2>
+    <div id="staff-list"></div>
+  </div>
+
+  <script>
+    function renderStaffDashboard() {
+      const opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      const listContainer = document.getElementById('staff-list');
+      listContainer.innerHTML = ""; 
+
+      // 修正点：「大学宛」かつ「未処理ではない（＝厚生部が送信済）」ものだけを表示する
+      const universityOpinions = opinions.filter(op => 
+        op.target === "大学（教職員宛）" && op.status !== "未処理（確認待ち）"
+      );
+
+      if(universityOpinions.length === 0) {
+        listContainer.innerHTML = `<p style="text-align:center; color:#64748b; padding: 40px;">現在、届いている意見はありません。</p>`;
+        return;
+      }
+
+      universityOpinions.forEach(op => {
+        const card = document.createElement('div');
+        card.className = 'opinion-card';
+        
+        const isReplied = (op.status === "回答済み（厚生部確認待ち）" || op.status === "公開済み");
+        
+        card.innerHTML = `
+          <div>
+            <span class="tag tag-category">${op.category}</span>
+            <span class="tag tag-status">${op.status}</span>
+          </div>
+          <div class="opinion-body">${op.content}</div>
+          <div style="font-size: 0.85rem; color: #64748b;">投稿日: ${op.date}</div>
+          
+          <div class="reply-section">
+            ${isReplied ? `
+              <div style="background:#ecfdf5; padding:10px; border-radius:4px; color:#065f46; font-size:0.9rem;">
+                <strong>送信済みの回答：</strong><br>${op.replyText}
+              </div>
+            ` : `
+              <label>大学からの回答を入力</label>
+              <textarea id="reply-${op.id}" rows="4" placeholder="学生への回答を記入してください..."></textarea>
+              <div style="text-align: right;">
+                <button class="submit-reply-btn" onclick="sendReply(${op.id})">回答を厚生部へ送信</button>
+              </div>
+            `}
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+    }
+
+    function sendReply(id) {
+      if(!confirm("この回答で厚生部に返信します。よろしいですか？")) return;
+
+      const replyText = document.getElementById(`reply-${id}`).value;
+      if(!replyText) return alert("回答内容を入力してください。");
+
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      opinions = opinions.map(op => {
+        if(op.id === id) {
+          op.status = "回答済み（厚生部確認待ち）";
+          op.replyText = replyText;
+        }
+        return op;
+      });
+
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("回答を厚生部へ送信しました。");
+      renderStaffDashboard();
+    }
+
+    renderStaffDashboard();
+  </script>
+</body>
+</html>
