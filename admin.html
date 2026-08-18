@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>意見箱 管理ダッシュボード（厚生部専用）</title>
+  <style>
+    :root { --admin-primary: #0f172a; --bg-color: #f8fafc; --card-bg: #ffffff; --text-main: #1e293b; }
+    body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; }
+    .admin-header { background-color: var(--admin-primary); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+    .admin-header h1 { margin: 0; font-size: 1.2rem; }
+    .container { max-width: 800px; margin: 20px auto; padding: 0 20px; }
+    .opinion-card { background-color: var(--card-bg); border-radius: 8px; padding: 20px; margin-bottom: 16px; border-left: 5px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; font-weight: bold; display: inline-block; margin-right: 8px; margin-bottom: 8px; }
+    .tag-target { background-color: #dbeafe; color: #1e40af; }
+    .tag-category { background-color: #f3e8ff; color: #6b21a8; }
+    .tag-status { background-color: #fee2e2; color: #991b1b; }
+    .tag-status.waiting { background-color: #e0e7ff; color: #3730a3; }
+    .tag-status.ready { background-color: #fef08a; color: #854d0e; }
+    .tag-status.published { background-color: #d1fae5; color: #065f46; }
+    .opinion-body { font-size: 1rem; line-height: 1.6; white-space: pre-wrap; margin: 12px 0; padding: 12px; background-color: #f1f5f9; border-radius: 4px; }
+    .reply-box { background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 4px; margin-top: 12px; font-size: 0.95rem; }
+    .opinion-meta { font-size: 0.85rem; color: #64748b; margin-top: 12px; }
+    .action-btn { background-color: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .publish-btn { background-color: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <header class="admin-header">
+    <h1>厚生部 管理ダッシュボード</h1>
+    <button onclick="clearData()" style="background:#ef4444; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">全データ消去(デモ用)</button>
+  </header>
+
+  <div class="container">
+    <h2 style="margin-bottom: 20px;">意見の一元管理（進捗状況）</h2>
+    <div id="admin-list"></div>
+  </div>
+
+  <script>
+    function renderAdminDashboard() {
+      const opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      const listContainer = document.getElementById('admin-list');
+      listContainer.innerHTML = ""; 
+
+      if(opinions.length === 0) {
+        listContainer.innerHTML = `<p style="text-align:center; color:#64748b;">現在、データはありません。</p>`;
+        return;
+      }
+
+      opinions.forEach(op => {
+        const card = document.createElement('div');
+        card.className = 'opinion-card';
+        
+        let statusClass = "tag-status";
+        if(op.status === "教職員回答待ち") statusClass += " waiting";
+        if(op.status === "回答済み（厚生部確認待ち）") statusClass += " ready";
+        if(op.status === "公開済み") statusClass += " published";
+
+        let actionArea = "";
+        
+        if(op.status === "未処理（確認待ち）") {
+          actionArea = `<button class="action-btn" onclick="escalateToStaff(${op.id})">教職員へ送信（要PIN）</button>`;
+        } else if(op.status === "教職員回答待ち") {
+          actionArea = `<p style="font-size:0.85rem; color:#64748b; font-weight:bold;">※現在、教職員の回答を待っています。</p>`;
+        } else if(op.status === "回答済み（厚生部確認待ち）") {
+          actionArea = `
+            <div class="reply-box"><strong>【返ってきた回答内容】</strong><br>${op.replyText}</div>
+            <div style="margin-top: 12px; text-align: right;">
+              <button class="publish-btn" onclick="publishOpinion(${op.id})">特設ページに公開する</button>
+            </div>
+          `;
+        } else if(op.status === "公開済み") {
+          actionArea = `<div class="reply-box" style="background:#d1fae5; border-color:#a7f3d0;"><strong>公開中の回答:</strong><br>${op.replyText}</div>`;
+        }
+
+        card.innerHTML = `
+          <div>
+            <span class="tag tag-target">宛先: ${op.target}</span>
+            <span class="tag tag-category">${op.category}</span>
+            <span class="tag ${statusClass}">${op.status}</span>
+          </div>
+          <div class="opinion-body">${op.content}</div>
+          <div class="opinion-meta">
+            <strong>投稿者:</strong> ${op.grade} / ${op.name} (${op.email}) &nbsp;|&nbsp; <strong>投稿日:</strong> ${op.date}
+          </div>
+          <div style="margin-top: 16px;">
+            ${actionArea}
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+    }
+
+    function escalateToStaff(id) {
+      const pin = prompt("【誤操作防止・権限確認】\n教職員へ送信します。厚生部長のPINコード（4桁）を入力してください。\n（※デモ用PIN: 1234）");
+      
+      if (pin === null) return;
+      if (pin === "1234") {
+        let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+        opinions = opinions.map(op => {
+          if(op.id === id) op.status = "教職員回答待ち";
+          return op;
+        });
+        localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+        alert("教職員のダッシュボードへ送信しました。");
+        renderAdminDashboard();
+      } else {
+        alert("PINコードが正しくありません。送信はキャンセルされました。");
+      }
+    }
+
+    function publishOpinion(id) {
+      if(!confirm("本当にこの回答を学生向けの特設ページに公開しますか？")) return;
+      
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      opinions = opinions.map(op => {
+        if(op.id === id) op.status = "公開済み";
+        return op;
+      });
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("学生向けの特設ページに回答を公開しました！");
+      renderAdminDashboard();
+    }
+
+    function clearData() {
+      if(confirm("デモ用の保存データをすべて消去しますか？")) {
+        localStorage.removeItem('appOpinionsData');
+        renderAdminDashboard();
+      }
+    }
+
+    renderAdminDashboard();
+  </script>
+</body>
+</html>
