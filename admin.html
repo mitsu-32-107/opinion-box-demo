@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>意見箱 管理ダッシュボード（厚生部専用）</title>
+  <style>
+    :root { --admin-primary: #0f172a; --bg-color: #f8fafc; --card-bg: #ffffff; --text-main: #1e293b; }
+    body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; }
+    .admin-header { background-color: var(--admin-primary); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+    .admin-header h1 { margin: 0; font-size: 1.2rem; }
+    .container { max-width: 800px; margin: 20px auto; padding: 0 20px; }
+    .opinion-card { background-color: var(--card-bg); border-radius: 8px; padding: 20px; margin-bottom: 16px; border-left: 5px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; font-weight: bold; display: inline-block; margin-right: 8px; margin-bottom: 8px; }
+    .tag-target { background-color: #dbeafe; color: #1e40af; }
+    .tag-category { background-color: #f3e8ff; color: #6b21a8; }
+    .tag-status { background-color: #fee2e2; color: #991b1b; }
+    .tag-status.waiting { background-color: #e0e7ff; color: #3730a3; }
+    .tag-status.ready { background-color: #fef08a; color: #854d0e; }
+    .tag-status.published { background-color: #d1fae5; color: #065f46; }
+    .opinion-body { font-size: 1rem; line-height: 1.6; white-space: pre-wrap; margin: 12px 0 4px 0; padding: 12px; background-color: #f1f5f9; border-radius: 4px; }
+    .reply-box { background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 4px; margin-top: 12px; font-size: 0.95rem; }
+    .opinion-meta { font-size: 0.85rem; color: #64748b; margin-top: 12px; }
+    .action-btn { background-color: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .exec-btn { background-color: #8b5cf6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; } 
+    .publish-btn { background-color: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; }
+    .unpublish-btn { background-color: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.9rem; }
+    .reask-btn { background-color: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; margin-right: 12px; }
+    .exec-reask-btn { background-color: #c026d3; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; margin-right: 12px; }
+    .cancel-btn { background-color: #64748b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85rem; } 
+    .edit-btn { background-color: transparent; color: #64748b; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+    .edit-btn:hover { background-color: #e2e8f0; color: #334155; }
+    .history-box { margin-top: 16px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; }
+    .history-title { font-size: 0.95rem; color: #334155; margin-bottom: 8px; }
+    .history-list { list-style-type: none; padding-left: 0; margin: 0; }
+    .history-item { margin-bottom: 12px; font-size: 0.85rem; color: #475569; }
+    .history-time { font-weight: bold; color: #0f172a; margin-right: 8px; }
+    .history-detail { margin-top: 4px; padding-left: 8px; border-left: 2px solid #cbd5e1; white-space: pre-wrap; font-size: 0.85rem; color: #1e293b; background-color: #ffffff; padding: 8px; border-radius: 0 4px 4px 0;}
+  </style>
+</head>
+<body>
+  <header class="admin-header">
+    <h1>厚生部 管理ダッシュボード</h1>
+    <button onclick="clearData()" style="background:#ef4444; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">全データ消去(デモ用)</button>
+  </header>
+
+  <div class="container">
+    <h2 style="margin-bottom: 20px;">意見の一元管理（進捗状況・対応履歴）</h2>
+    <div id="admin-list"></div>
+  </div>
+
+  <script>
+    function verifyAdminPin() {
+      const pin = prompt("【厚生部長 権限の確認】\n実行するには厚生部長のPINコード（4桁）を入力してください。\n（※デモ用PIN: 1234）");
+      if (pin === null) return false; 
+      if (pin === "1234") return true; 
+      alert("PINコードが正しくありません。操作はキャンセルされました。");
+      return false; 
+    }
+
+    function verifyExecutivePin() {
+      const pin = prompt("【執行委員会 幹部権限の確認】\n実行するには幹部専用のPINコードを入力してください。\n（※デモ用PIN: 5678）");
+      if (pin === null) return false; 
+      if (pin === "5678") return true; 
+      alert("PINコードが正しくありません。幹部以外の回答は許可されていません。");
+      return false; 
+    }
+
+    function addHistoryLog(op, action, detail = "") {
+      if (!op.history) op.history = [];
+      const now = new Date().toLocaleString('ja-JP');
+      op.history.push({ time: now, action: action, detail: detail });
+    }
+
+    function renderAdminDashboard() {
+      const opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      const listContainer = document.getElementById('admin-list');
+      listContainer.innerHTML = ""; 
+
+      if(opinions.length === 0) {
+        listContainer.innerHTML = `<p style="text-align:center; color:#64748b;">現在、データはありません。</p>`;
+        return;
+      }
+
+      opinions.forEach(op => {
+        const card = document.createElement('div');
+        card.className = 'opinion-card';
+        
+        let statusClass = "tag-status";
+        if(op.status === "教職員回答待ち") statusClass += " waiting";
+        if(op.status === "回答済み（厚生部確認待ち）") statusClass += " ready";
+        if(op.status === "公開済み") statusClass += " published";
+
+        let actionArea = "";
+        let replyArea = "";
+        let historyArea = "";
+        
+        if(op.replyText) {
+          let replyBg = op.status === "公開済み" ? "background:#d1fae5; border-color:#a7f3d0;" : "";
+          let replyTitle = op.status === "公開済み" ? "公開中の回答" : "【返ってきた回答内容】";
+          let timeHtml = op.replyDate ? `<div style="font-size: 0.8rem; color: #10b981; margin-bottom: 4px; font-weight: bold;">🕰 送信時刻: ${op.replyDate}</div>` : "";
+          
+          replyArea = `
+            <div id="reply-container-${op.id}">
+              <div class="reply-box" style="${replyBg}">
+                ${timeHtml}
+                <strong>${replyTitle}</strong><br>${op.replyText}
+                <div style="margin-top: 8px; text-align: right;">
+                  <button class="edit-btn" onclick="editText(${op.id}, 'reply')">✏️ 回答を微修正</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        if(op.status === "未処理（確認待ち）") {
+          if(op.target && op.target.includes("学友会")) {
+            actionArea = `<div id="exec-action-${op.id}"><button class="exec-btn" onclick="openExecutiveEditor(${op.id})">幹部陣として直接回答する（要PIN）</button></div>`;
+          } else {
+            actionArea = `<button class="action-btn" onclick="escalateToStaff(${op.id})">教職員へ送信（要PIN）</button>`;
+          }
+        } else if(op.status === "教職員回答待ち") {
+          actionArea = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+              <p style="font-size:0.85rem; color:#64748b; font-weight:bold; margin: 0;">※現在、教職員の回答を待っています。</p>
+              <button class="cancel-btn" onclick="cancelEscalation(${op.id})">送信を取り消す</button>
+            </div>
+          `;
+        } else if(op.status === "回答済み（厚生部確認待ち）") {
+          let reaskButton = "";
+          if (op.target && op.target.includes("学友会")) {
+            reaskButton = `<button class="exec-reask-btn" onclick="requestExecutiveReanswer(${op.id})">幹部へ差し戻す（再依頼）</button>`;
+          } else {
+            reaskButton = `<button class="reask-btn" onclick="requestReanswer(${op.id})">教職員へ差し戻す（再依頼）</button>`;
+          }
+          
+          actionArea = `
+            <div style="margin-top: 12px; display: flex; justify-content: flex-end; align-items: center;">
+              ${reaskButton}
+              <button class="publish-btn" onclick="publishOpinion(${op.id})">特設ページに公開する</button>
+            </div>
+          `;
+        } else if(op.status === "公開済み") {
+          actionArea = `
+            <div style="margin-top: 12px; text-align: right;">
+              <button class="unpublish-btn" onclick="unpublishOpinion(${op.id})">非公開に戻す（誤操作取消）</button>
+            </div>
+          `;
+        }
+
+        if(op.history && op.history.length > 0) {
+          let historyItems = op.history.map(h => {
+            let detailHtml = h.detail ? `<div class="history-detail">${h.detail}</div>` : "";
+            return `<li class="history-item"><span class="history-time">${h.time}</span> ${h.action}${detailHtml}</li>`;
+          }).join('');
+          historyArea = `
+            <div class="history-box">
+              <div class="history-title"><strong>📋 対応履歴</strong></div>
+              <ul class="history-list">${historyItems}</ul>
+            </div>
+          `;
+        }
+
+        card.innerHTML = `
+          <div>
+            <span class="tag tag-target">宛先: ${op.target}</span>
+            <span class="tag tag-category">${op.category}</span>
+            <span class="tag ${statusClass}">${op.status}</span>
+          </div>
+          
+          <div id="content-container-${op.id}">
+            <div class="opinion-body">${op.content}</div>
+            <div style="text-align: right;">
+              <button class="edit-btn" onclick="editText(${op.id}, 'content')">✏️ 投稿内容を微修正</button>
+            </div>
+          </div>
+
+          <div class="opinion-meta">
+            <strong>投稿者:</strong> ${op.grade} / ${op.name} (${op.email}) &nbsp;|&nbsp; <strong>投稿日:</strong> ${op.date}
+          </div>
+          ${historyArea}
+          <div style="margin-top: 16px;">
+            ${replyArea}
+            ${actionArea}
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+    }
+
+    function editText(id, fieldType) {
+      if (!verifyAdminPin()) return;
+
+      const opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      const targetIndex = opinions.findIndex(op => op.id === id);
+      if(targetIndex === -1) return;
+
+      const currentText = fieldType === 'content' ? opinions[targetIndex].content : opinions[targetIndex].replyText;
+      const containerId = fieldType === 'content' ? `content-container-${id}` : `reply-container-${id}`;
+      const container = document.getElementById(containerId);
+
+      container.innerHTML = `
+        <div style="background: #fff; padding: 12px; border: 2px solid #3b82f6; border-radius: 4px; margin-top: 8px;">
+          <div style="margin-bottom: 8px; font-weight: bold; color: #1e40af;">✏️ テキスト編集モード</div>
+          <textarea id="edit-input-${id}-${fieldType}" style="width: 100%; height: 120px; padding: 8px; font-family: inherit; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; resize: vertical;">${currentText}</textarea>
+          <div style="margin-top: 8px; text-align: right;">
+            <button onclick="renderAdminDashboard()" style="background: #94a3b8; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-weight: bold;">キャンセル</button>
+            <button onclick="saveText(${id}, '${fieldType}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">保存する</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function saveText(id, fieldType) {
+      const newText = document.getElementById(`edit-input-${id}-${fieldType}`).value;
+      if (!newText.trim()) {
+        alert("テキストが空です。入力をキャンセルしますか？");
+        return;
+      }
+
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      let targetIndex = opinions.findIndex(op => op.id === id);
+      if(targetIndex === -1) return;
+
+      if(fieldType === 'content') {
+        addHistoryLog(opinions[targetIndex], "学生の投稿内容を微修正", `【修正前】\n${opinions[targetIndex].content}`);
+        opinions[targetIndex].content = newText;
+      } else {
+        addHistoryLog(opinions[targetIndex], "回答内容を微修正", `【修正前】\n${opinions[targetIndex].replyText}`);
+        opinions[targetIndex].replyText = newText;
+      }
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      renderAdminDashboard(); 
+    }
+
+    function openExecutiveEditor(id) {
+      if (!verifyExecutivePin()) return;
+
+      const container = document.getElementById(`exec-action-${id}`);
+      container.innerHTML = `
+        <div style="background: #f3e8ff; padding: 12px; border-radius: 4px; border: 1px solid #d8b4fe; margin-top: 12px;">
+          <strong style="color: #6b21a8;">【幹部回答入力】</strong><br>
+          <div style="font-size: 0.85rem; color: #6b21a8; margin-bottom: 8px;">学友会執行委員会としての回答を入力してください。</div>
+          <textarea id="exec-input-${id}" style="width: 100%; height: 120px; padding: 8px; font-family: inherit; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; resize: vertical;" placeholder="回答をここに入力..."></textarea>
+          <div style="margin-top: 8px; text-align: right;">
+            <button onclick="renderAdminDashboard()" style="background: #94a3b8; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-weight: bold;">キャンセル</button>
+            <button onclick="saveExecutiveAnswer(${id})" style="background: #8b5cf6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">回答を保存・公開準備へ</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function saveExecutiveAnswer(id) {
+      const reply = document.getElementById(`exec-input-${id}`).value;
+      if (!reply.trim()) {
+        alert("回答が空です。入力してください。");
+        return;
+      }
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      let targetIndex = opinions.findIndex(op => op.id === id);
+      if(targetIndex === -1) return;
+      
+      let op = opinions[targetIndex];
+      op.status = "回答済み（厚生部確認待ち）";
+      op.replyText = reply;
+      op.replyDate = new Date().toLocaleString('ja-JP'); // ★ 追加：送信時刻を記録
+      addHistoryLog(op, "学友会幹部が回答を行いました");
+      
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("幹部としての回答を保存しました。公開準備が整いました。");
+      renderAdminDashboard();
+    }
+
+    function escalateToStaff(id) {
+      if (!verifyAdminPin()) return;
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      opinions = opinions.map(op => { 
+        if(op.id === id) {
+          op.status = "教職員回答待ち"; 
+          addHistoryLog(op, "教職員へ回答を依頼しました");
+        }
+        return op; 
+      });
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("教職員のダッシュボードへ送信しました。");
+      renderAdminDashboard();
+    }
+
+    function cancelEscalation(id) {
+      if (!verifyAdminPin()) return;
+      if(!confirm("教職員への送信を取り消し、未処理状態に戻しますか？\n（教職員用のダッシュボードからは見えなくなります）")) return;
+
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      opinions = opinions.map(op => { 
+        if(op.id === id) {
+          op.status = "未処理（確認待ち）"; 
+          addHistoryLog(op, "教職員への回答依頼を取り消しました");
+        }
+        return op; 
+      });
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("教職員への送信を取り消しました。");
+      renderAdminDashboard();
+    }
+
+    function requestReanswer(id) {
+      if (!verifyAdminPin()) return;
+      if(!confirm("教職員に回答の修正や追記（再回答）を依頼しますか？\nステータスが「教職員回答待ち」に戻ります。")) return;
+      
+      let message = prompt("【お願いメッセージ（必須）】\n教職員へ差し戻す理由や、追記・修正してほしい内容を入力してください：");
+      if (message === null) return; 
+      
+      if (message.trim() === "") {
+        alert("【エラー】差し戻しには理由の入力が必須です。処理をキャンセルしました。");
+        return;
+      }
+      
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      opinions = opinions.map(op => { 
+        if(op.id === id) {
+          op.status = "教職員回答待ち"; 
+          let logDetail = `【依頼メッセージ】\n${message}\n\n【以前の回答内容】\n${op.replyText}`;
+          addHistoryLog(op, "教職員へ差し戻し（再依頼）を実行", logDetail); 
+        }
+        return op; 
+      });
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("教職員へ再回答を依頼しました。");
+      renderAdminDashboard();
+    }
+
+    function requestExecutiveReanswer(id) {
+      if (!verifyAdminPin()) return;
+      if(!confirm("幹部陣に回答の修正や追記（再回答）を依頼しますか？\nステータスが「未処理」に戻り、再度幹部用の入力画面が出現します。")) return;
+      
+      let message = prompt("【お願いメッセージ（必須）】\n幹部陣へ差し戻す理由や、追記・修正してほしい内容を入力してください：");
+      if (message === null) return; 
+      
+      if (message.trim() === "") {
+        alert("【エラー】差し戻しには理由の入力が必須です。処理をキャンセルしました。");
+        return;
+      }
+      
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      opinions = opinions.map(op => { 
+        if(op.id === id) {
+          op.status = "未処理（確認待ち）"; 
+          let logDetail = `【依頼メッセージ】\n${message}\n\n【以前の回答内容】\n${op.replyText}`;
+          addHistoryLog(op, "幹部へ差し戻し（再依頼）を実行", logDetail); 
+        }
+        return op; 
+      });
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("幹部へ再回答を依頼しました。");
+      renderAdminDashboard();
+    }
+
+    function publishOpinion(id) {
+      if (!verifyAdminPin()) return; 
+      if(!confirm("本当にこの回答を学生向けの特設ページに公開しますか？")) return;
+      
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      opinions = opinions.map(op => { 
+        if(op.id === id) {
+          op.status = "公開済み"; 
+          op.publishDate = new Date().toLocaleDateString('ja-JP'); // ★ 追加：公開日を記録
+          addHistoryLog(op, "学生向けページに公開しました");
+        }
+        return op; 
+      });
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("学生向けの特設ページに回答を公開しました！");
+      renderAdminDashboard();
+    }
+
+    function unpublishOpinion(id) {
+      if (!verifyAdminPin()) return; 
+      if(!confirm("この回答を「非公開（公開前の確認待ち）」に戻しますか？")) return;
+      
+      let opinions = JSON.parse(localStorage.getItem('appOpinionsData')) || [];
+      opinions = opinions.map(op => { 
+        if(op.id === id) {
+          op.status = "回答済み（厚生部確認待ち）"; 
+          addHistoryLog(op, "公開を取り消し、非公開に戻しました");
+        }
+        return op; 
+      });
+      localStorage.setItem('appOpinionsData', JSON.stringify(opinions));
+      alert("非公開状態に戻しました。");
+      renderAdminDashboard();
+    }
+
+    function clearData() {
+      if (!verifyAdminPin()) return; 
+      if(confirm("デモ用の保存データをすべて消去しますか？")) {
+        localStorage.removeItem('appOpinionsData');
+        renderAdminDashboard();
+      }
+    }
+
+    renderAdminDashboard();
+  </script>
+</body>
+</html>
